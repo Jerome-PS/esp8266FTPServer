@@ -50,7 +50,7 @@
 class FtpServer
 {
 public:
-  void    begin(String uname, String pword);
+  void    begin(String uname, String pword, boolean _bUnixLst = false);
   void    handleFTP();
 
 private:
@@ -96,7 +96,7 @@ private:
            bytesTransfered;           //
   String   _FTP_USER;
   String   _FTP_PASS;
-
+  boolean  bUnixLst;
   
 
 };

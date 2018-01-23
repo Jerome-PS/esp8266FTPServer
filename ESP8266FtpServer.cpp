@@ -34,11 +34,12 @@
 WiFiServer ftpServer( FTP_CTRL_PORT );
 WiFiServer dataServer( FTP_DATA_PORT_PASV );
 
-void FtpServer::begin(String uname, String pword)
+void FtpServer::begin(String uname, String pword, boolean _bUnixLst)
 {
   // Tells the ftp server to begin listening for incoming connection
 	_FTP_USER=uname;
 	_FTP_PASS = pword;
+	bUnixLst = _bUnixLst;
 
 	ftpServer.begin();
 	delay(10);
@@ -104,10 +105,26 @@ void FtpServer::handleFTP()
   else if( readChar() > 0 )         // got response
   {
     if( cmdStatus == 3 )            // Ftp server waiting for user identity
-      if( userIdentity() )
-        cmdStatus = 4;
-      else
-        cmdStatus = 0;
+    {
+      if( ! strcmp( command, "FEAT" ))
+      {
+        client.println( "211-Extensions suported:");
+        client.println( " MLSD");
+        client.println( "211 End.");
+      }
+      else if( ! strcmp( command, "USER" ))
+      {
+        int result = userIdentity();
+        if( result == 1 )
+        {
+          cmdStatus = 4;
+        }
+        else
+        {
+          cmdStatus = 0;
+        }
+      }
+    }
     else if( cmdStatus == 4 )       // Ftp server waiting for user registration
       if( userPassword() )
       {
@@ -393,7 +410,7 @@ boolean FtpServer::processCommand()
 			fn = dir.fileName();
 			fn.remove(0, 1);
 			fs = String(dir.fileSize());
-            data.println( "+r,s" + fs);
+            data.print( "+r,s" + fs);
             data.println( ",\t" + fn );
           nm ++;
         }
@@ -413,7 +430,12 @@ boolean FtpServer::processCommand()
 				File file = root.openNextFile();
 				while(file){
 					if(file.isDirectory()){
-						data.println( "+r,s <DIR> " + String(file.name()));
+						if(bUnixLst)
+						{
+							data.println("drwxrw-rw-   2 esp esp      " + String("92") + " Jun 27  2011 " + String(file.name()) );
+						} else {
+							data.println( "+r,s <DIR> " + String(file.name()));
+						}
 						// Serial.print("  DIR : ");
 						// Serial.println(file.name());
 						// if(levels){
@@ -422,10 +444,15 @@ boolean FtpServer::processCommand()
 					} else {
 						String fn, fs;
 						fn = file.name();
-						// fn.remove(0, 1);
 						fs = String(file.size());
-						data.println( "+r,s" + fs);
-						data.println( ",\t" + fn );
+						if(bUnixLst)
+						{
+							fn.remove(0, 1);
+							data.println("-rw-rw-rw-   1 esp esp      " + fs + " Jun 27  2011 " + fn );
+						} else {
+							data.print( "+r,s" + fs);
+							data.println( ",\t" + fn );
+						}
 						nm ++;
 					}
 					file = root.openNextFile();
@@ -731,6 +758,13 @@ boolean FtpServer::processCommand()
       client.println( "500 Unknow SITE command " +String(parameters) );
   }
   //
+  //  SYST - System type
+  //
+  else if( ! strcmp( command, "SYST" ))
+  {
+      client.println( "215 UNIX Type: L8" );
+  }
+  //
   //  Unrecognized commands ...
   //
   else
@@ -891,9 +925,13 @@ int8_t FtpServer::readChar()
             }
           }
           else if( strlen( cmdLine ) > 4 )
+          {
             rc = -2; // Syntax error.
+          }
           else
+          {
             strcpy( command, cmdLine );
+          }
           iCL = 0;
         }
       }
